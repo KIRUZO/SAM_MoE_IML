@@ -13,7 +13,7 @@ from PIL import Image
 import argparse
 import math
 import json
-# 假设你的 utils.data_val 还在，包含 test_dataset
+
 from utils.data_val import test_dataset
 from segment_anything import sam_model_registry
 import clip
