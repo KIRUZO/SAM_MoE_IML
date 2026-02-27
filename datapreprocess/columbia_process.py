@@ -3,18 +3,15 @@ import cv2
 import numpy as np
 import shutil
 
-# ================= 路径配置 =================
-# 1. 你已经整理好的、只有180张图的 Tp 文件夹
-target_tp_dir = r"E:\tsinghua_projects\RAs\work1_AI_manipulation_detection\Datasets\Columbia Uncompressed Image Splicing Detection\4cam_splc\4cam_splc"
 
-# 2. 原始下载的、乱七八糟的 edgemask 文件夹
-source_mask_dir = r"E:\tsinghua_projects\RAs\work1_AI_manipulation_detection\Datasets\Columbia Uncompressed Image Splicing Detection\4cam_splc\edgemask" 
+target_tp_dir = r"" # Tp
+source_mask_dir = r" " # Columbia Mask
 
-# 3. 你的目标 Gt 文件夹
-target_gt_dir = r"E:\tsinghua_projects\RAs\work1_AI_manipulation_detection\Datasets\Columbia Uncompressed Image Splicing Detection\4cam_splc\GT"
+
+target_gt_dir = r"" # Output Gt
 # ===========================================
 
-# 清空并重建 Gt 文件夹，确保没有残留
+
 if os.path.exists(target_gt_dir):
     shutil.rmtree(target_gt_dir)
 os.makedirs(target_gt_dir, exist_ok=True)
@@ -49,17 +46,14 @@ for img_filename in tp_files:
                 mask_path = temp_path
                 break
     
-    # === 开始处理 ===
     if os.path.exists(mask_path):
-        # 1. 读取彩色 Mask
         img = cv2.imread(mask_path)
         
         if img is None:
             print(f"[错误] 无法读取文件: {mask_path}")
             continue
 
-        # 2. 颜色清洗 (红背景变黑，绿蓝前景变白)
-        # BGR 通道
+
         blue_channel = img[:, :, 0]
         green_channel = img[:, :, 1]
         
@@ -68,16 +62,12 @@ for img_filename in tp_files:
         # 只要绿色或蓝色通道 > 100，就认为是篡改
         binary_mask[(green_channel > 100) | (blue_channel > 100)] = 255
 
-        # 3. 保存
-        # 必须和 Tp 文件名完全一致 (后缀改为 png 以免压缩)
         save_name = name_no_ext + ".png" 
         save_path = os.path.join(target_gt_dir, save_name)
         
         cv2.imwrite(save_path, binary_mask)
         success_count += 1
-        
-        # 可选：打印进度
-        # print(f"匹配成功: {img_filename} -> {save_name}")
+
         
     else:
         print(f"[警告] 找不到对应的 Mask: {img_filename} (预期: {mask_filename})")

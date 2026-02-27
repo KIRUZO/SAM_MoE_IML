@@ -4,17 +4,13 @@ import shutil
 import cv2
 import numpy as np
 
-# ==========================================
-# 🎯 核心配置：根据你截图确认的绝对路径
-# ==========================================
-# 这是那个 142KB 的 CSV 文件的完整路径
-csv_path = r"E:\tsinghua_projects\RAs\work1_AI_manipulation_detection\Datasets\nist16\NC2016_Test0613\NC2016_Test0613\reference\manipulation\NC2016-manipulation-ref.csv"
+
+csv_path = r" " # NIST16 CSV
 
 # ==========================================
 
 # 1. 自动反推数据根目录
 # CSV 在: .../reference/manipulation/CSV
-# 我们需要回退 3 层找到根目录 (.../NC2016_Test0613)，因为 probe 在那里
 ref_dir = os.path.dirname(csv_path)       # .../manipulation
 ref_parent = os.path.dirname(ref_dir)     # .../reference
 dataset_root = os.path.dirname(ref_parent)# .../NC2016_Test0613 (根目录)
@@ -55,7 +51,7 @@ for row in reader:
     row = {k.strip(): v.strip() for k, v in row.items()}
     
     # 筛选：只提取 IsTarget = True 的 (篡改图)
-    # 你的CSV里可能是 'Y' 或者 'True'，我们都兼容一下
+    # CSV里可能是 'Y' 或者 'True'，都兼容一下
     is_target = row.get('IsTarget', 'N')
     if is_target not in ['True', 'Y', 'TRUE']:
         continue

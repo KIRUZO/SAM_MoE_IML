@@ -3,12 +3,11 @@ import shutil
 import cv2
 import numpy as np
 
-# ================= 配置路径 =================
-# 1. 你的 IMD2020 原始文件夹路径 (包含几百个子文件夹的那个目录)
-source_root = r"E:\tsinghua_projects\RAs\work1_AI_manipulation_detection\Datasets\IMD2020" 
 
-# 2. 目标输出路径
-output_root = r"E:\tsinghua_projects\RAs\work1_AI_manipulation_detection\Datasets\A_Processed\val_all_set\IMD"
+source_root = r" " # original IMD2020 dataset root
+
+
+output_root = r" " # 输出根目录，里面会自动创建 Tp 和 Gt 两个子文件夹
 target_tp_dir = os.path.join(output_root, "Tp")
 target_gt_dir = os.path.join(output_root, "Gt")
 # ===========================================
@@ -72,7 +71,7 @@ for root, dirs, files in os.walk(source_root):
             
             # 2. 处理 Gt (读取 -> 二值化 -> 重命名保存)
             # BoxPromptIML 要求 Gt 文件名和 Tp 一致 (后缀可以不同)
-            # 所以我们要把 c8tt7fg_0_mask.png 改名为 c8tt7fg_0.png
+            # 所以要把 c8tt7fg_0_mask.png 改名为 c8tt7fg_0.png
             dst_gt_name = tp_name_no_ext + ".png"
             dst_gt_path = os.path.join(target_gt_dir, dst_gt_name)
             

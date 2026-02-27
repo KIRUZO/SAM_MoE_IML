@@ -19,9 +19,7 @@ import matplotlib.pyplot as plt
 import math
 from datetime import datetime
 
-# 导入 SAM 官方库
 from segment_anything import sam_model_registry
-# 导入 CLIP 库
 import clip
 
 
@@ -51,18 +49,9 @@ class PrototypicalMemoryBank(nn.Module):
         x_flat = x.permute(0, 2, 3, 1).reshape(-1, C) # 调整形状以便计算形状为[B*H*W, C] 4096 * 256
         x_norm = F.normalize(x_flat, dim=-1)
 
-        # 计算与所有原型的余弦相似度
-        # sim_f: 与篡改原型的相似度, sim_a: 与真实原型的相似度
-        # 原型的形状为 [num_protos, C] 16 * 256
-        # 做完 matmul 后形状为 [B*H*W, num_protos] 4096 * 16
-        # 代表对于每一个像素点，全图4096个点，计算它与16个原型的相似度（每个像素点都得到了16个分值）
         sim_f = torch.matmul(x_norm, self.forgery_protos.t()) # [Total_Tokens, num_protos]
         sim_a = torch.matmul(x_norm, self.authentic_protos.t()) # [Total_Tokens, num_protos]
 
-        # 后续可以给上述sim做可视化
-        
-        # 取最大相似度作为该点是“假”还是“真”的证据
-        # 这里体现了 RAG 的“检索”思想
         evidence_f, _ = sim_f.max(dim=-1) # 既然每一个像素点有16个分值，取最大的那个作为该点的最终分值
         evidence_a, _ = sim_a.max(dim=-1)
         
@@ -70,8 +59,8 @@ class PrototypicalMemoryBank(nn.Module):
         # 形状还原回 [B, 1, 64, 64]
         guidance = (evidence_f - evidence_a).view(B, 1, H, W) # 计算相对差异
 
-        # 如果值大于 0，说明该点长得更像“假”的。
-        # 如果值小于 0，说明该点长得更像“真”的。
+        # 如果值大于 0，说明该点长得[更]像“假”的。
+        # 如果值小于 0，说明该点长得[更]像“真”的。
         return guidance
 
     @torch.no_grad()
@@ -130,9 +119,7 @@ class PrototypicalMemoryBank(nn.Module):
         # 6. 全局归一化，确保所有原型保持在单位超球面上，方便下次计算相似度
         self.forgery_protos = F.normalize(self.forgery_protos, dim=-1)
         self.authentic_protos = F.normalize(self.authentic_protos, dim=-1)
-# ==========================================
-# 1. 语义映射器与 DeepSeekMoE 组件
-# ==========================================
+
 
 class SemanticCLIPMapper(nn.Module):
     def __init__(self, clip_dim=512, sam_dim=256, num_tokens=4):
@@ -230,7 +217,6 @@ class SAM_MoE_Forgery(nn.Module):
             blk.attn.qkv = MoE_Adapter(blk.attn.qkv, num_shared=1, num_routed=6, top_k=3, rank=16)
             
         # 2. 加载冻结的 CLIP 用于语义映射
-        # self.clip_model, _ = clip.load("ViT-B/32", device="cuda")
         self.clip_model, _ = clip.load("ViT-B/32", device=device) # 使用传入的 device
         for param in self.clip_model.parameters():
             param.requires_grad = False
@@ -322,13 +308,13 @@ class SAM_MoE_Forgery(nn.Module):
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=semantic_sparse_embeddings, # 注入可学习语义提示
-            dense_prompt_embeddings=dense_embeddings, # 注入 RAG 指引
+            dense_prompt_embeddings=enhanced_dense_embeddings, # 注入 RAG 指引
             multimask_output=False,
         )
         return low_res_masks
 
 # ==========================================
-# 2. 数据、Loss、可视化 (保持不变)
+# 2. 数据、Loss、可视化函数定义
 # ==========================================
 
 def setup_logging(output_dir):
@@ -419,15 +405,7 @@ def main():
     # model = SAM_MoE_Forgery("vit_h", args.sam_ckpt).to(device)
     model = SAM_MoE_Forgery("vit_h", args.sam_ckpt, device=device).to(device)
     optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-    # try the new SAM optimizer
-    # base_optimizer = optim.AdamW
-    # optimizer = SAMOptimizer(
-    #     filter(lambda p: p.requires_grad, model.parameters()), 
-    #     base_optimizer, 
-    #     rho=0.05, # 扰动半径，0.05 是通用推荐值
-    #     lr=args.lr,
-    #     weight_decay=1e-4
-    # )
+
     criterion = ForgeryLoss().to(device)
     scaler = GradScaler() if args.mixed_precision else None
     
@@ -441,8 +419,7 @@ def main():
         pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{args.epochs}")
         for imgs, gts, _ in pbar:
             imgs, gts = imgs.to(device), gts.to(device)
-            
-            # --- 第一步：寻找最坏邻居 ---
+
             optimizer.zero_grad()
             with torch.amp.autocast('cuda', enabled=args.mixed_precision):
                 preds = model(imgs, gt_mask=gts) # 传入 GT 以更新记忆库
