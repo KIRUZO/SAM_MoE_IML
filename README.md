@@ -105,26 +105,6 @@ python inference.py --input_image path/to/test.jpg --model_path path/to/best_che
 
 ---
 
-## 4. Experimental Results
-*Detailed performance metrics (F1-score, IoU) on standard benchmarks like CASIA and Columbia will be updated here.*
-
-| Method | Dataset | F1-Score | IoU |
-| :--- | :--- | :--- | :--- |
-| Vanilla SAM | CASIA v2 | 0.42 | 0.31 |
-| **SAM-MoE-IML (Ours)** | **CASIA v2** | **0.85** | **0.76** |
-
----
-
-## 5. Citation
-If you find this work useful for your research, please cite:
-```bibtex
-@article{kiruzo2024sammoeiml,
-  title={SAM-MoE-IML: Segment Anything Model with Mixture of Experts for Image Manipulation Localization},
-  author={KIRUZO},
-  journal={GitHub Repository},
-  year={2024}
-}
-```
 
 ---
 
