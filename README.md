@@ -18,7 +18,7 @@ Instead of standard monolithic adapters, we inject a **DeepSeekMoE** structure i
 
 **Mathematical Formula:**
 For a hidden state $x$, the output of the MoE layer $y$ is:
-$$y = \text{Base}(x) + \sum_{j=1}^{N_s} E_{shared,j}(x) + \sum_{k \in \text{TopK}} \mathcal{G}(x)_k \cdot E_{routed,k}(x)$$
+$y = \text{Base}(x) + \sum_{j=1}^{N_s} E_{shared,j}(x) + \sum_{k \in \text{TopK}} \mathcal{G}(x)_k \cdot E_{routed,k}(x)$
 Where:
 - $\text{Base}(x)$ is the frozen SAM linear output.
 - $N_s$ is the number of shared experts.
