@@ -1,5 +1,3 @@
-Here is a complete, professional `README.md` for the **SAM-MoE-IML** repository, written entirely in English. It emphasizes the methodology, mathematical foundations, and the underlying logic as requested.
-
 ---
 
 # SAM-MoE-IML: Segment Anything Model with Mixture of Experts for Image Manipulation Localization
