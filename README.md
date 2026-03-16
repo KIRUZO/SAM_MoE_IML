@@ -1,110 +1,106 @@
 ---
 
-# SAM-MoE-IML: Segment Anything Model with Mixture of Experts for Image Manipulation Localization
+# SAM-MoE-Forgery: Segment Anything with MoE and Prototypical Memory for Image Forensics
 
-This repository contains the official implementation of **SAM-MoE-IML**. This project adapts the powerful **Segment Anything Model (SAM)** for the specialized task of **Image Manipulation Localization (IML)** by integrating a **Mixture of Experts (MoE)** architecture.
+This repository implements a specialized framework for **Image Manipulation Localization (IML)**. It enhances the **Segment Anything Model (SAM)** by integrating a **DeepSeekMoE-inspired architecture**, a **Prototypical Memory Bank (RAG-based)**, and **Learnable CLIP Semantic Prompts**.
 
 ---
 
 ## 1. Methodology
 
-### 1.1 Motivation
-Standard Image Manipulation Localization (IML) requires the model to identify tampered regions (Splicing, Copy-Move, Inpainting). While **SAM** possesses extraordinary zero-shot capabilities for object boundary segmentation, it is fundamentally designed for *semantic* understanding rather than *forensic* analysis. 
+The core philosophy of this project is to transform SAM from a semantic segmenter into a forensic segmenter by injecting multi-modal knowledge and historical "forgery experience."
 
-The challenges are:
-1.  **Semantic vs. Forensic:** SAM identifies "objects," but IML must identify "artifacts" (noise inconsistency, resampling traces).
-2.  **Diversity of Forgery:** Different manipulations leave different traces. A single monolithic adapter often fails to capture the multi-modal nature of forgery forensic features.
+### 1.1 DeepSeekMoE-inspired Adapters
+Instead of standard monolithic adapters, we inject a **DeepSeekMoE** structure into the SAM Image Encoder's Transformer blocks. This allows the model to handle the diversity of forgery types (Splicing, Copy-Move, etc.).
 
-**SAM-MoE-IML** addresses these by introducing a **Mixture of Experts (MoE)** mechanism into the SAM encoder-decoder pipeline, allowing specialized "experts" to focus on distinct forensic domains.
+*   **Shared Experts:** Capture universal forensic traces (e.g., JPEG compression artifacts).
+*   **Routed Experts:** Fine-grained experts that are sparsely activated via a **Top-K Router** to specialize in specific manipulation signatures.
 
-### 1.2 Architecture
-The framework consists of three main stages:
-1.  **Frozen SAM Backbone:** A pre-trained ViT-based Image Encoder that provides robust structural and semantic features.
-2.  **MoE-Forensic Adapters:** Small, trainable modules inserted into the Transformer layers. Instead of a single adapter, we use a bank of experts.
-3.  **Gating Network:** A lightweight routing module that decides which expert is most relevant to the local image patch.
-
-### 1.3 Mathematical Formulation
-
-#### A. The MoE Layer
-For a given input feature $x$ (from a Transformer block), the output of the MoE layer $y$ is computed as a weighted sum of the outputs from $N$ independent experts:
-
-$$y = \sum_{i=1}^{N} \mathcal{G}(x)_i \cdot E_i(x)$$
-
+**Mathematical Formula:**
+For a hidden state $x$, the output of the MoE layer $y$ is:
+$$y = \text{Base}(x) + \sum_{j=1}^{N_s} E_{shared,j}(x) + \sum_{k \in \text{TopK}} \mathcal{G}(x)_k \cdot E_{routed,k}(x)$$
 Where:
-*   $E_i(x)$ represents the transformation performed by the $i$-th **Forensic Expert** (typically a series of 1x1 or 3x3 convolutions or MLP layers).
-*   $\mathcal{G}(x)_i$ is the routing weight provided by the **Gating Network** for the $i$-th expert.
+- $\text{Base}(x)$ is the frozen SAM linear output.
+- $N_s$ is the number of shared experts.
+- $\mathcal{G}(x)$ is the Softmax-gated router output for the routed experts.
 
-#### B. Gating Mechanism
-To ensure the model selects the most appropriate forensic expert (e.g., an expert specialized in JPEG artifacts vs. an expert specialized in edge blurring), we use a Softmax gating function:
+### 1.2 Prototypical Memory Bank (RAG for Forensics)
+To provide the model with "prior knowledge" of what forgery looks like, we implement a **Prototypical Memory Bank** containing 16 forgery prototypes and 16 authentic prototypes.
 
-$$\mathcal{G}(x) = \text{Softmax}\left(\frac{W_g x + b_g}{\tau}\right)$$
+*   **Retrieval (Guidance):** The model compares current image features against the memory bank to generate a **Similarity Guidance Map**.
+    $$\text{Guidance} = \max(\text{Sim}(x, P_{forgery})) - \max(\text{Sim}(x, P_{authentic}))$$
+*   **Update (Slot-based Momentum):** During training, the model identifies the "nearest" expert slot in the memory bank for the current batch's features and updates it using momentum:
+    $$P_{target} = m \cdot P_{target} + (1-m) \cdot \text{BatchCenter}$$
+    This ensures each prototype slot specializes in a specific forensic pattern (e.g., one for noise, one for edge blurring).
 
-Where $W_g$ and $b_g$ are learnable weights and $\tau$ is a temperature hyperparameter used to control the sparsity of the expert selection.
-
-#### C. Optimization Objective
-The model is trained using a multi-task loss function to ensure both localization accuracy and expert diversity:
-
-$$\mathcal{L}_{total} = \alpha \mathcal{L}_{focal} + \beta \mathcal{L}_{dice} + \gamma \mathcal{L}_{bal}$$
-
-1.  **Localization Loss ($\mathcal{L}_{focal} + \mathcal{L}_{dice}$):** Standard segmentation losses to supervise the predicted binary mask.
-2.  **Load Balancing Loss ($\mathcal{L}_{bal}$):** To prevent "expert collapse" (where only one expert is trained), we introduce a balancing loss to encourage equal utilization of all experts:
-    $$\mathcal{L}_{bal} = N \cdot \sum_{i=1}^{N} f_i \cdot P_i$$
-    where $f_i$ is the fraction of tokens routed to expert $i$, and $P_i$ is the probability distribution of the gate.
-
-### 1.4 Why MoE for IML?
-*   **Specialization:** Different experts can learn to specialize. For example, Expert A may focus on high-frequency noise analysis (useful for Splicing), while Expert B focuses on local texture regularity (useful for Inpainting).
-*   **Efficiency:** By using MoE-Adapters, we only update a tiny fraction of SAM's total parameters, making the training computationally efficient while preventing the "catastrophic forgetting" of SAM's original boundary knowledge.
-*   **Dynamic Routing:** The gating network acts as a "forensic selector" that adaptively changes its strategy based on the specific artifacts present in the input image.
+### 1.3 Semantic CLIP Mapper (Multimodal Prompts)
+Instead of using fixed points or boxes, we use **Learnable Context Optimization (CoOp)**.
+1.  **Learnable Context:** We define a set of learnable tokens $[V]_1, [V]_2, \dots, [V]_n$ combined with CLIP's SOS/EOS tokens.
+2.  **Cross-Attention:** A `SemanticCLIPMapper` uses learnable queries to extract forensic-relevant semantics from the CLIP text embedding.
+3.  **Injection:** These are fed into the SAM Mask Decoder as **Sparse Prompt Embeddings**.
 
 ---
 
-## 2. Installation
+## 2. Why it Works?
 
-### Requirements
-- Python 3.8+
-- PyTorch 1.10+
-- torchvision
-- segment-anything
+1.  **Expert Specialization:** The MoE router prevents interference between different forensic tasks. For example, the expert trained on "copy-move" patterns won't be diluted by data from "inpainting" tasks.
+2.  **Explicit Forensic Bias:** By adding the `forgery_guidance` from the memory bank directly to the `dense_prompt_embeddings`, we force the SAM Decoder to pay attention to regions that historically "look like" forgeries.
+3.  **Semantic Guidance:** Using CLIP features as prompts allows the model to leverage high-level linguistic concepts of "objects" vs "manipulations," which regular SAM lacks.
+4.  **Stability:** By freezing the backbone and using low-rank ($r=16$) experts, the model maintains SAM's spatial reasoning while becoming sensitive to forensic noise.
 
-### Setup
+---
+
+## 3. Loss Function
+
+The model is optimized using a balanced **Forgery Loss** without requiring complex load-balancing weights, focusing on high-quality mask generation:
+
+$$\mathcal{L}_{total} = \mathcal{L}_{BCE}(\text{pred}, \text{gt}) + \mathcal{L}_{Dice}(\text{pred}, \text{gt})$$
+
+- **BCE:** Standard pixel-wise classification.
+- **Dice:** Handles class imbalance (when the tampered area is very small compared to the whole image).
+
+---
+
+## 4. Usage
+
+### Installation
 ```bash
-git clone https://github.com/KIRUZO/SAM_MoE_IML.git
-cd SAM_MoE_IML
 pip install -r requirements.txt
-```
-
----
-
-## 3. Usage
-
-### Data Preparation
-Organize your dataset (e.g., CASIA, NIST16, or IMD2020) in the following structure:
-```text
-data/
-  train/
-    images/
-    masks/
-  val/
-    images/
-    masks/
+# Requires: torch, segment_anything, clip, opencv-python, tqdm
 ```
 
 ### Training
-To train the SAM-MoE-IML model:
+The script supports **Mixed Precision (AMP)** for faster training on modern GPUs.
+
 ```bash
-python train.py --model_type vit_h --checkpoint path/to/sam_vit_h.pth --dataset_path ./data --epochs 50 --batch_size 8
+python train.py \
+    --train_root /path/to/dataset \
+    --sam_ckpt ./weights/sam_vit_h_4b8939.pth \
+    --output_dir ./runs/my_experiment \
+    --batch_size 1 \
+    --lr 1e-5 \
+    --gpu 0 \
+    --mixed_precision
 ```
 
-### Inference
-To run localization on a single image:
-```bash
-python inference.py --input_image path/to/test.jpg --model_path path/to/best_checkpoint.pth
-```
+### Data Structure
+The dataset should follow this convention:
+- `Tp/`: Manipulated images (Target images).
+- `Gt/`: Binary ground truth masks.
 
 ---
 
+## 5. Implementation Details
 
----
+| Component | Specification |
+| :--- | :--- |
+| **Backbone** | SAM ViT-H (Frozen) |
+| **MoE Config** | 1 Shared Expert, 6 Routed Experts, Top-3 Selection |
+| **Memory Bank** | 256-dim features, 16 slots per class |
+| **Input Size** | 1024x1024 (Image), 256x256 (GT Mask) |
+| **Optimizer** | AdamW with $10^{-5}$ Learning Rate |
 
-## Acknowledgments
-This code is built upon the [Segment Anything Model (SAM)](https://github.com/facebookresearch/segment-anything) by Meta AI. We thank the authors for their groundbreaking work.
+--- 
+
+**Author:** [KIRUZO]  
+**License:** MIT License
